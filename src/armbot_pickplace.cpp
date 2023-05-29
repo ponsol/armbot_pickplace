@@ -63,7 +63,8 @@ void MTCTaskNode::setupPlanningScene()
 #ifndef PANDA 
   //for servoarm
   object.primitives[0].dimensions = { 0.8, 0.06 };
-  pose.position.y = 2.0;
+  pose.position.y = 3.0;
+  pose.position.z = 1.2;
 #endif
 
 
@@ -128,7 +129,7 @@ mtc::Task MTCTaskNode::createTask()
   // Set task properties
   task.setProperty("group", arm_group_name);
   task.setProperty("eef", hand_group_name);
-  task.setProperty("ik_frame", arm_frame);
+  task.setProperty("ik_frame", hand_frame);
 
 // Disable warnings for this line, as it's a variable that's set but not used in this example
 #pragma GCC diagnostic push
@@ -184,8 +185,7 @@ mtc::Task MTCTaskNode::createTask()
 
   // Set hand forward direction
   geometry_msgs::msg::Vector3Stamped vec;
-  //vec.header.frame_id = hand_frame;
-  vec.header.frame_id = "world";
+  vec.header.frame_id = hand_frame;
   vec.vector.z = 0.1;
   stage->setDirection(vec);
   grasp->insert(std::move(stage));
@@ -199,7 +199,7 @@ mtc::Task MTCTaskNode::createTask()
   stage->properties().configureInitFrom(mtc::Stage::PARENT);
   stage->properties().set("marker_ns", "grasp_pose");
   stage->setPreGraspPose("open");
-  //stage->setObject("object");
+  stage->setObject("object");
   stage->setGraspPose("pose1");
   stage->setAngleDelta(M_PI / 12);
   stage->setMonitoredStage(current_state_ptr);
