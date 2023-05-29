@@ -121,7 +121,6 @@ mtc::Task MTCTaskNode::createTask()
 #else
   const auto& arm_group_name = "arm";
   const auto& hand_frame = "hand";
-  const auto& arm_frame = "arm";
 #endif
 
 

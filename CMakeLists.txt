@@ -26,6 +26,7 @@ ament_target_dependencies(
   "rclcpp"
 )
 
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 install(TARGETS armbot_pickplace
   DESTINATION lib/${PROJECT_NAME})
 
