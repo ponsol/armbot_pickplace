@@ -120,7 +120,7 @@ mtc::Task MTCTaskNode::createTask()
   const auto& arm_group_name = "panda_arm";
 #else
   const auto& arm_group_name = "arm";
-  const auto& hand_frame = "hand";
+  const auto& hand_frame = "eef_link";
 #endif
 
 
@@ -180,12 +180,12 @@ mtc::Task MTCTaskNode::createTask()
   stage->properties().set("marker_ns", "approach_object");
   stage->properties().set("link", hand_frame);
   stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-  stage->setMinMaxDistance(0.1, 0.15);
+  stage->setMinMaxDistance(-2.1, 2.15);
 
   // Set hand forward direction
   geometry_msgs::msg::Vector3Stamped vec;
   vec.header.frame_id = hand_frame;
-  vec.vector.z = 0.1;
+  vec.vector.z = 1.0;
   stage->setDirection(vec);
   grasp->insert(std::move(stage));
   }
@@ -199,17 +199,17 @@ mtc::Task MTCTaskNode::createTask()
   stage->properties().set("marker_ns", "grasp_pose");
   stage->setPreGraspPose("open");
   stage->setObject("object");
-  stage->setGraspPose("pose1");
+  //stage->setGraspPose("pose1");
   stage->setAngleDelta(M_PI / 12);
   stage->setMonitoredStage(current_state_ptr);
 
 
   Eigen::Isometry3d grasp_frame_transform;
-  Eigen::Quaterniond q = Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitX()) *
-                      Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitY()) *
-                      Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitZ());
+  Eigen::Quaterniond q = Eigen::AngleAxisd(0, Eigen::Vector3d::UnitX()) *
+                      Eigen::AngleAxisd(0, Eigen::Vector3d::UnitY()) *
+                      Eigen::AngleAxisd(0, Eigen::Vector3d::UnitZ());
   grasp_frame_transform.linear() = q.matrix();
-  grasp_frame_transform.translation().z() = 0.1;
+  grasp_frame_transform.translation().y() = 1.0;
 
 
   // Compute IK
@@ -225,7 +225,6 @@ mtc::Task MTCTaskNode::createTask()
 
 
   /*
-
 
   {
   auto stage =
