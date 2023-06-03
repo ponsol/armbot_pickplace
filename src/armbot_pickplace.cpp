@@ -5,6 +5,7 @@
 #include <moveit/task_constructor/task.h>
 #include <moveit/task_constructor/solvers.h>
 #include <moveit/task_constructor/stages.h>
+
 #if __has_include(<tf2_geometry_msgs/tf2_geometry_msgs.hpp>)
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #else
@@ -54,17 +55,19 @@ void MTCTaskNode::setupPlanningScene()
   object.header.frame_id = "world";
   object.primitives.resize(1);
   object.primitives[0].type = shape_msgs::msg::SolidPrimitive::CYLINDER;
-  object.primitives[0].dimensions = { 0.1, 0.02 };
+  object.primitives[0].dimensions = { 0.8, 0.06 };
 
   geometry_msgs::msg::Pose pose;
+
+  pose.position.y = 2.0;
+  pose.position.z = 1.0;
+  pose.position.x = -2.0;
+
+#ifdef PANDA 
+  object.primitives[0].dimensions = { 0.1, 0.02 };
   pose.position.x = 0.5;
   pose.position.y = -0.25;
-
-#ifndef PANDA 
-  //for servoarm
-  object.primitives[0].dimensions = { 0.8, 0.06 };
-  pose.position.y = 3.0;
-  pose.position.z = 1.2;
+  pose.position.z = 0.0;
 #endif
 
 
@@ -142,8 +145,8 @@ mtc::Task MTCTaskNode::createTask()
 
   auto sampling_planner = std::make_shared<mtc::solvers::PipelinePlanner>(node_);
   auto interpolation_planner = std::make_shared<mtc::solvers::JointInterpolationPlanner>();
-
   auto cartesian_planner = std::make_shared<mtc::solvers::CartesianPath>();
+
   cartesian_planner->setMaxVelocityScaling(1.0);
   cartesian_planner->setMaxAccelerationScaling(1.0);
   cartesian_planner->setStepSize(.01);
@@ -163,7 +166,6 @@ mtc::Task MTCTaskNode::createTask()
   stage_move_to_pick->properties().configureInitFrom(mtc::Stage::PARENT);
   task.add(std::move(stage_move_to_pick));
 
-
   mtc::Stage* attach_object_stage = nullptr;
 
   {
@@ -175,48 +177,89 @@ mtc::Task MTCTaskNode::createTask()
 
 
   {
-  auto stage =
-      std::make_unique<mtc::stages::MoveRelative>("approach object", cartesian_planner);
+  auto stage = std::make_unique<mtc::stages::MoveRelative>("approach object", cartesian_planner);
+  //auto stage = std::make_unique<mtc::stages::MoveRelative>("approach object", sampling_planner);
   stage->properties().set("marker_ns", "approach_object");
   stage->properties().set("link", hand_frame);
   stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-  stage->setMinMaxDistance(-2.1, 2.15);
+  stage->setMinMaxDistance(0.0, 0.1);
 
   // Set hand forward direction
   geometry_msgs::msg::Vector3Stamped vec;
-  vec.header.frame_id = hand_frame;
+  //vec.header.frame_id = hand_frame ;
+  vec.header.frame_id = "world";
+  //vec.vector.y = 0.7071;
+  //vec.vector.z = 0.7071;
   vec.vector.z = 1.0;
+#ifdef PANDA
+  vec.vector.x = 0.0; vec.vector.y = 0.0; vec.vector.z = 1.0;
+#endif
   stage->setDirection(vec);
+
   grasp->insert(std::move(stage));
   }
 
 
 
   {
-   // Sample grasp pose
+   // grasp poses
+   /*
   auto stage = std::make_unique<mtc::stages::GenerateGraspPose>("generate grasp pose");
   stage->properties().configureInitFrom(mtc::Stage::PARENT);
   stage->properties().set("marker_ns", "grasp_pose");
   stage->setPreGraspPose("open");
   stage->setObject("object");
-  //stage->setGraspPose("pose1");
-  stage->setAngleDelta(M_PI / 12);
+  stage->setAngleDelta(M_PI / 8);
+  stage->setMonitoredStage(current_state_ptr);
+  */
+
+  auto stage = std::make_unique<mtc::stages::GeneratePose>("gen grasp pose");
+  stage->properties().configureInitFrom(mtc::Stage::PARENT);
+  stage->properties().set("marker_ns", "grasp_pose");
   stage->setMonitoredStage(current_state_ptr);
 
+  geometry_msgs::msg::PoseStamped p;
+  //auto p = geometry_msgs::msg::PoseStamped();
 
+  p.header.frame_id = "world";
+  p.pose.position.x = -1.6013;
+  p.pose.position.y = 1.5119;
+  p.pose.position.z = 0.91775;
+  p.pose.orientation.x = 0.037457;
+  p.pose.orientation.y = 0.023906;
+  p.pose.orientation.z = 0.36648;
+  p.pose.orientation.w = 0.929366;
+  stage->setPose(p);
+
+
+
+  // translate/rotate grasp poses from eef
   Eigen::Isometry3d grasp_frame_transform;
-  Eigen::Quaterniond q = Eigen::AngleAxisd(0, Eigen::Vector3d::UnitX()) *
-                      Eigen::AngleAxisd(0, Eigen::Vector3d::UnitY()) *
-                      Eigen::AngleAxisd(0, Eigen::Vector3d::UnitZ());
+
+  Eigen::Vector3d tvec  = Eigen::Vector3d(0.0, 0.00,0.0);
+  //float trot[] = {0.0, 0.0, -M_PI/4.186};
+  float trot[] = {0.0, 0.0, 0.0};
+
+#ifdef PANDA
+   tvec  = Eigen::Vector3d(0.0,0.0,0.1);
+   trot[0] = M_PI/2; trot[1] = M_PI/2; trot[2] = M_PI/2;
+#endif
+
+  Eigen::Quaterniond q = Eigen::AngleAxisd(trot[0], Eigen::Vector3d::UnitX()) *
+                      Eigen::AngleAxisd(trot[1], Eigen::Vector3d::UnitY()) *
+                      Eigen::AngleAxisd(trot[2], Eigen::Vector3d::UnitZ());
   grasp_frame_transform.linear() = q.matrix();
-  grasp_frame_transform.translation().y() = 1.0;
+  grasp_frame_transform.translation() = tvec;
+
+  Eigen::Affine3d egrasp_frame_transform = Eigen::Affine3d::Identity();
+  egrasp_frame_transform.translation() = tvec ;
 
 
   // Compute IK
   auto wrapper =
       std::make_unique<mtc::stages::ComputeIK>("grasp pose IK", std::move(stage));
   wrapper->setMaxIKSolutions(8);
-  wrapper->setMinSolutionDistance(1.0);
+  wrapper->setMinSolutionDistance(1.00);
   wrapper->setIKFrame(grasp_frame_transform, hand_frame);
   wrapper->properties().configureInitFrom(mtc::Stage::PARENT, { "eef", "group"  });
   wrapper->properties().configureInitFrom(mtc::Stage::INTERFACE, { "target_pose" });
@@ -224,7 +267,6 @@ mtc::Task MTCTaskNode::createTask()
   }
 
 
-  /*
 
   {
   auto stage =
@@ -258,7 +300,7 @@ mtc::Task MTCTaskNode::createTask()
   auto stage =
       std::make_unique<mtc::stages::MoveRelative>("lift object", cartesian_planner);
   stage->properties().configureInitFrom(mtc::Stage::PARENT, { "group" });
-  stage->setMinMaxDistance(0.1, 0.3);
+  stage->setMinMaxDistance(0.1, 2.0);
   stage->setIKFrame(hand_frame);
   stage->properties().set("marker_ns", "lift_object");
 
@@ -269,6 +311,8 @@ mtc::Task MTCTaskNode::createTask()
   stage->setDirection(vec);
   grasp->insert(std::move(stage));
   }
+
+  /*
   */
 
    task.add(std::move(grasp));
