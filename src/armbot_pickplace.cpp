@@ -31,11 +31,14 @@ public:
 
   void setupPlanningScene();
 
+
 private:
   // Compose an MTC task from a series of stages.
   mtc::Task createTask();
   mtc::Task task_;
   rclcpp::Node::SharedPtr node_;
+
+  void getpos(geometry_msgs::msg::PoseStamped &p, std::vector<float> &pos,  std::vector<float> &ang );
 };
 
 rclcpp::node_interfaces::NodeBaseInterface::SharedPtr MTCTaskNode::getNodeBaseInterface()
@@ -108,6 +111,18 @@ void MTCTaskNode::doTask()
   return;
 }
 
+void MTCTaskNode::getpos(geometry_msgs::msg::PoseStamped &p, std::vector<float> &pos,  std::vector<float> &ang ) {
+  p.pose.position.x = pos[0];
+  p.pose.position.y = pos[1];
+  p.pose.position.z = pos[2];
+  p.pose.orientation.x = ang[0];
+  p.pose.orientation.y = ang[1];
+  p.pose.orientation.z = ang[2];
+  p.pose.orientation.w = ang[3];
+return ;
+}
+
+
 mtc::Task MTCTaskNode::createTask()
 {
   mtc::Task task;
@@ -158,9 +173,11 @@ mtc::Task MTCTaskNode::createTask()
   task.add(std::move(stage_open_hand));
 
 
+
   auto stage_move_to_pick = std::make_unique<mtc::stages::Connect>(
     "move to pick",
-     mtc::stages::Connect::GroupPlannerVector{ { arm_group_name, sampling_planner } });
+     mtc::stages::Connect::GroupPlannerVector{ { arm_group_name, sampling_planner },
+                                                { hand_group_name, interpolation_planner } });
 
   stage_move_to_pick->setTimeout(5.0);
   stage_move_to_pick->properties().configureInitFrom(mtc::Stage::PARENT);
@@ -174,7 +191,6 @@ mtc::Task MTCTaskNode::createTask()
   task.properties().exposeTo(grasp->properties(), { "eef", "group", "ik_frame" });
   grasp->properties().configureInitFrom(mtc::Stage::PARENT,
                                         { "eef", "group", "ik_frame" });
-
 
   {
   auto stage = std::make_unique<mtc::stages::MoveRelative>("approach object", cartesian_planner);
@@ -219,29 +235,23 @@ mtc::Task MTCTaskNode::createTask()
   stage->setMonitoredStage(current_state_ptr);
 
   geometry_msgs::msg::PoseStamped p;
-  //auto p = geometry_msgs::msg::PoseStamped();
-
   p.header.frame_id = "world";
-  p.pose.position.x = -1.6013;
-  p.pose.position.y = 1.5119;
-  p.pose.position.z = 0.91775;
-  p.pose.orientation.x = 0.037457;
-  p.pose.orientation.y = 0.023906;
-  p.pose.orientation.z = 0.36648;
-  p.pose.orientation.w = 0.929366;
-  stage->setPose(p);
 
+  std::vector<float> pos{-1.6014, 1.51181, 0.917797}; std::vector<float> ang{0.0374589, 0.0239122,  0.366514, 0.92935};
+
+  getpos(p, pos, ang);
+
+  stage->setPose(p);
 
 
   // translate/rotate grasp poses from eef
   Eigen::Isometry3d grasp_frame_transform;
 
-  Eigen::Vector3d tvec  = Eigen::Vector3d(0.0, 0.00,0.0);
-  //float trot[] = {0.0, 0.0, -M_PI/4.186};
+  Eigen::Vector3d tvec  = Eigen::Vector3d(0.0, 0.0, 0.0);
   float trot[] = {0.0, 0.0, 0.0};
 
 #ifdef PANDA
-   tvec  = Eigen::Vector3d(0.0,0.0,0.1);
+   tvec  = Eigen::Vector3d(0.0,0.0, 0.1);
    trot[0] = M_PI/2; trot[1] = M_PI/2; trot[2] = M_PI/2;
 #endif
 
@@ -251,8 +261,8 @@ mtc::Task MTCTaskNode::createTask()
   grasp_frame_transform.linear() = q.matrix();
   grasp_frame_transform.translation() = tvec;
 
-  Eigen::Affine3d egrasp_frame_transform = Eigen::Affine3d::Identity();
-  egrasp_frame_transform.translation() = tvec ;
+  //Eigen::Affine3d egrasp_frame_transform = Eigen::Affine3d::Identity();
+  //egrasp_frame_transform.translation() = tvec ;
 
 
   // Compute IK
@@ -312,11 +322,12 @@ mtc::Task MTCTaskNode::createTask()
   grasp->insert(std::move(stage));
   }
 
-  /*
-  */
-
    task.add(std::move(grasp));
   }
+
+
+  /*
+  */
 
   return task;
 }
